@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package edgevision.runtime.v1;
+
+option go_package = "edgevision/contracts/gen/runtime/v1;runtimev1";
+
+import "common/v1/common.proto";
+
+service RuntimeControlService {
+  rpc EnsureSourceSession(EnsureSourceSessionRequest) returns (EnsureSourceSessionResponse);
+  rpc StartInstance(StartInstanceRequest) returns (StartInstanceResponse);
+  rpc StopInstance(StopInstanceRequest) returns (StopInstanceResponse);
+}
+
+service RuntimeQueryService {
+  rpc GetInstanceStatus(GetInstanceStatusRequest) returns (GetInstanceStatusResponse);
+}
+
+service RuntimeEventService {
+  rpc StreamEvents(StreamEventsRequest) returns (stream RuntimeEventEnvelope);
+}
+
+message EnsureSourceSessionRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string node_id = 2;
+  string target_kind = 3;
+  string target_id = 4;
+  string source_profile_hash = 5;
+}
+
+message EnsureSourceSessionResponse {
+  string source_session_id = 1;
+  string state = 2;
+}
+
+message StartInstanceRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string deployment_id = 2;
+  string runtime_instance_id = 3;
+  string source_session_id = 4;
+  string config_revision_id = 5;
+  string artifact_id = 6;
+}
+
+message StartInstanceResponse {
+  bool accepted = 1;
+}
+
+message StopInstanceRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string runtime_instance_id = 2;
+}
+
+message StopInstanceResponse {
+  bool accepted = 1;
+}
+
+message GetInstanceStatusRequest {
+  string runtime_instance_id = 1;
+}
+
+message GetInstanceStatusResponse {
+  string runtime_instance_id = 1;
+  string state = 2;
+  string health_status = 3;
+}
+
+message StreamEventsRequest {
+  string node_id = 1;
+}
+
+message RuntimeEventEnvelope {
+  string event_id = 1;
+  string event_type = 2;
+  string node_id = 3;
+  string runtime_instance_id = 4;
+  string source_session_id = 5;
+}

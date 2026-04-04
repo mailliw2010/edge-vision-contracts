@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package edgevision.nodeagent.v1;
+
+option go_package = "edgevision/contracts/gen/nodeagent/v1;nodeagentv1";
+
+import "common/v1/common.proto";
+
+service NodeAgentService {
+  rpc ApplyConfig(ApplyConfigRequest) returns (ApplyConfigResponse);
+  rpc StartOperation(StartOperationRequest) returns (StartOperationResponse);
+  rpc GetNodeStatus(GetNodeStatusRequest) returns (GetNodeStatusResponse);
+}
+
+message ApplyConfigRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string config_key = 2;
+  string scope_type = 3;
+  string scope_id = 4;
+}
+
+message ApplyConfigResponse {
+  bool accepted = 1;
+  string operation_id = 2;
+}
+
+message StartOperationRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string operation_type = 2;
+  string node_id = 3;
+}
+
+message StartOperationResponse {
+  string operation_id = 1;
+  bool accepted = 2;
+}
+
+message GetNodeStatusRequest {
+  string node_id = 1;
+}
+
+message GetNodeStatusResponse {
+  string node_id = 1;
+  string status = 2;
+  string agent_version = 3;
+}

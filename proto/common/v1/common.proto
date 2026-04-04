@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package edgevision.common.v1;
+
+option go_package = "edgevision/contracts/gen/common/v1;commonv1";
+
+message RequestMeta {
+  string request_id = 1;
+  string trace_id = 2;
+}
+
+message ResourceRef {
+  string id = 1;
+  string kind = 2;
+}
