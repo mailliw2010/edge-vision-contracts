@@ -4,12 +4,41 @@ package edgevision.common.v1;
 
 option go_package = "edgevision/contracts/gen/common/v1;commonv1";
 
+import "google/protobuf/timestamp.proto";
+
 message RequestMeta {
   string request_id = 1;
   string trace_id = 2;
+  string actor = 3;
+  google.protobuf.Timestamp sent_at = 4;
 }
 
 message ResourceRef {
-  string id = 1;
-  string kind = 2;
+  string kind = 1;
+  string id = 2;
+  string revision = 3;
+}
+
+message StatusSnapshotMeta {
+  google.protobuf.Timestamp observed_at = 1;
+  uint64 sequence = 2;
+}
+
+enum LifecycleState {
+  LIFECYCLE_STATE_UNSPECIFIED = 0;
+  LIFECYCLE_STATE_PENDING = 1;
+  LIFECYCLE_STATE_APPLYING = 2;
+  LIFECYCLE_STATE_RUNNING = 3;
+  LIFECYCLE_STATE_STOPPING = 4;
+  LIFECYCLE_STATE_STOPPED = 5;
+  LIFECYCLE_STATE_DEGRADED = 6;
+  LIFECYCLE_STATE_FAILED = 7;
+}
+
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTH_STATE_UNKNOWN = 1;
+  HEALTH_STATE_OK = 2;
+  HEALTH_STATE_DEGRADED = 3;
+  HEALTH_STATE_ERROR = 4;
 }

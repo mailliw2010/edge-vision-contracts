@@ -7,32 +7,27 @@ option go_package = "edgevision/contracts/gen/nodeagent/v1;nodeagentv1";
 import "common/v1/common.proto";
 
 service NodeAgentService {
-  rpc ApplyConfig(ApplyConfigRequest) returns (ApplyConfigResponse);
-  rpc StartOperation(StartOperationRequest) returns (StartOperationResponse);
   rpc GetNodeStatus(GetNodeStatusRequest) returns (GetNodeStatusResponse);
+  rpc ApplyNodeConfig(ApplyNodeConfigRequest) returns (ApplyNodeConfigResponse);
+  rpc RestartSupervisor(RestartSupervisorRequest) returns (RestartSupervisorResponse);
 }
 
-message ApplyConfigRequest {
-  edgevision.common.v1.RequestMeta meta = 1;
-  string config_key = 2;
-  string scope_type = 3;
-  string scope_id = 4;
+enum AccelerationBackend {
+  ACCELERATION_BACKEND_UNSPECIFIED = 0;
+  ACCELERATION_BACKEND_TENSORRT = 1;
+  ACCELERATION_BACKEND_CPU = 2;
 }
 
-message ApplyConfigResponse {
-  bool accepted = 1;
-  string operation_id = 2;
-}
-
-message StartOperationRequest {
-  edgevision.common.v1.RequestMeta meta = 1;
-  string operation_type = 2;
-  string node_id = 3;
-}
-
-message StartOperationResponse {
-  string operation_id = 1;
-  bool accepted = 2;
+message NodeStatus {
+  string node_id = 1;
+  string agent_version = 2;
+  edgevision.common.v1.LifecycleState state = 3;
+  edgevision.common.v1.HealthState health = 4;
+  string platform = 5;
+  string device_class = 6;
+  AccelerationBackend preferred_backend = 7;
+  bool supervisor_reachable = 8;
+  edgevision.common.v1.StatusSnapshotMeta snapshot = 9;
 }
 
 message GetNodeStatusRequest {
@@ -40,7 +35,29 @@ message GetNodeStatusRequest {
 }
 
 message GetNodeStatusResponse {
-  string node_id = 1;
-  string status = 2;
-  string agent_version = 3;
+  NodeStatus status = 1;
+}
+
+message ApplyNodeConfigRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string node_id = 2;
+  edgevision.common.v1.ResourceRef config_revision = 3;
+  string supervisor_endpoint = 4;
+  string status_endpoint = 5;
+}
+
+message ApplyNodeConfigResponse {
+  bool accepted = 1;
+  string operation_id = 2;
+}
+
+message RestartSupervisorRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string node_id = 2;
+  string reason = 3;
+}
+
+message RestartSupervisorResponse {
+  bool accepted = 1;
+  string operation_id = 2;
 }

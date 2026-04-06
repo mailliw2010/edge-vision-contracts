@@ -6,73 +6,82 @@ option go_package = "edgevision/contracts/gen/runtime/v1;runtimev1";
 
 import "common/v1/common.proto";
 
-service RuntimeControlService {
-  rpc EnsureSourceSession(EnsureSourceSessionRequest) returns (EnsureSourceSessionResponse);
-  rpc StartInstance(StartInstanceRequest) returns (StartInstanceResponse);
-  rpc StopInstance(StopInstanceRequest) returns (StopInstanceResponse);
+service SupervisorService {
+  rpc ApplyDeployment(ApplyDeploymentRequest) returns (ApplyDeploymentResponse);
+  rpc StopDeployment(StopDeploymentRequest) returns (StopDeploymentResponse);
+  rpc GetSupervisorStatus(GetSupervisorStatusRequest) returns (GetSupervisorStatusResponse);
+  rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
 }
 
-service RuntimeQueryService {
-  rpc GetInstanceStatus(GetInstanceStatusRequest) returns (GetInstanceStatusResponse);
+enum ExecutionBackend {
+  EXECUTION_BACKEND_UNSPECIFIED = 0;
+  EXECUTION_BACKEND_TENSORRT = 1;
+  EXECUTION_BACKEND_CPU = 2;
 }
 
-service RuntimeEventService {
-  rpc StreamEvents(StreamEventsRequest) returns (stream RuntimeEventEnvelope);
-}
-
-message EnsureSourceSessionRequest {
-  edgevision.common.v1.RequestMeta meta = 1;
+message WorkloadSpec {
+  string deployment_id = 1;
   string node_id = 2;
-  string target_kind = 3;
-  string target_id = 4;
-  string source_profile_hash = 5;
+  edgevision.common.v1.ResourceRef artifact = 3;
+  edgevision.common.v1.ResourceRef config_revision = 4;
+  edgevision.common.v1.ResourceRef input_binding = 5;
+  ExecutionBackend preferred_backend = 6;
 }
 
-message EnsureSourceSessionResponse {
-  string source_session_id = 1;
-  string state = 2;
+message ApplyDeploymentRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  WorkloadSpec spec = 2;
 }
 
-message StartInstanceRequest {
+message ApplyDeploymentResponse {
+  bool accepted = 1;
+  string operation_id = 2;
+}
+
+message StopDeploymentRequest {
   edgevision.common.v1.RequestMeta meta = 1;
   string deployment_id = 2;
-  string runtime_instance_id = 3;
-  string source_session_id = 4;
-  string config_revision_id = 5;
-  string artifact_id = 6;
+  string node_id = 3;
 }
 
-message StartInstanceResponse {
+message StopDeploymentResponse {
   bool accepted = 1;
+  string operation_id = 2;
 }
 
-message StopInstanceRequest {
-  edgevision.common.v1.RequestMeta meta = 1;
-  string runtime_instance_id = 2;
-}
-
-message StopInstanceResponse {
-  bool accepted = 1;
-}
-
-message GetInstanceStatusRequest {
-  string runtime_instance_id = 1;
-}
-
-message GetInstanceStatusResponse {
-  string runtime_instance_id = 1;
-  string state = 2;
-  string health_status = 3;
-}
-
-message StreamEventsRequest {
+message GetSupervisorStatusRequest {
   string node_id = 1;
 }
 
-message RuntimeEventEnvelope {
-  string event_id = 1;
-  string event_type = 2;
-  string node_id = 3;
-  string runtime_instance_id = 4;
-  string source_session_id = 5;
+message GetSupervisorStatusResponse {
+  SupervisorStatus status = 1;
+}
+
+message GetDeploymentStatusRequest {
+  string deployment_id = 1;
+  string node_id = 2;
+}
+
+message GetDeploymentStatusResponse {
+  DeploymentStatus status = 1;
+}
+
+message SupervisorStatus {
+  string node_id = 1;
+  string supervisor_version = 2;
+  edgevision.common.v1.LifecycleState state = 3;
+  edgevision.common.v1.HealthState health = 4;
+  ExecutionBackend default_backend = 5;
+  uint32 active_deployment_count = 6;
+  edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
+}
+
+message DeploymentStatus {
+  string deployment_id = 1;
+  string node_id = 2;
+  string runtime_instance_id = 3;
+  edgevision.common.v1.LifecycleState state = 4;
+  edgevision.common.v1.HealthState health = 5;
+  string status_message = 6;
+  edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
 }
