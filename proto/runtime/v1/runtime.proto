@@ -13,19 +13,13 @@ service SupervisorService {
   rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
 }
 
-enum ExecutionBackend {
-  EXECUTION_BACKEND_UNSPECIFIED = 0;
-  EXECUTION_BACKEND_TENSORRT = 1;
-  EXECUTION_BACKEND_CPU = 2;
-}
-
 message WorkloadSpec {
   string deployment_id = 1;
   string node_id = 2;
   edgevision.common.v1.ResourceRef artifact = 3;
   edgevision.common.v1.ResourceRef config_revision = 4;
   edgevision.common.v1.ResourceRef input_binding = 5;
-  ExecutionBackend preferred_backend = 6;
+  edgevision.common.v1.ExecutionBackend preferred_backend = 6;
 }
 
 message ApplyDeploymentRequest {
@@ -71,7 +65,7 @@ message SupervisorStatus {
   string supervisor_version = 2;
   edgevision.common.v1.LifecycleState state = 3;
   edgevision.common.v1.HealthState health = 4;
-  ExecutionBackend default_backend = 5;
+  edgevision.common.v1.ExecutionBackend default_backend = 5;
   uint32 active_deployment_count = 6;
   edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
 }

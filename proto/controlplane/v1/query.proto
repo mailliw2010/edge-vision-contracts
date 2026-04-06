@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package edgevision.controlplane.v1;
+
+option go_package = "edgevision/contracts/gen/controlplane/v1;controlplanev1";
+
+import "nodeagent/v1/nodeagent.proto";
+import "runtime/v1/runtime.proto";
+
+service StatusQueryService {
+  rpc GetLatestNodeStatus(GetLatestNodeStatusRequest) returns (GetLatestNodeStatusResponse);
+  rpc GetLatestSupervisorStatus(GetLatestSupervisorStatusRequest) returns (GetLatestSupervisorStatusResponse);
+  rpc GetLatestDeploymentStatus(GetLatestDeploymentStatusRequest) returns (GetLatestDeploymentStatusResponse);
+}
+
+message GetLatestNodeStatusRequest {
+  string node_id = 1;
+}
+
+message GetLatestNodeStatusResponse {
+  edgevision.nodeagent.v1.NodeStatus status = 1;
+}
+
+message GetLatestSupervisorStatusRequest {
+  string node_id = 1;
+}
+
+message GetLatestSupervisorStatusResponse {
+  edgevision.runtime.v1.SupervisorStatus status = 1;
+}
+
+message GetLatestDeploymentStatusRequest {
+  string deployment_id = 1;
+  string node_id = 2;
+}
+
+message GetLatestDeploymentStatusResponse {
+  edgevision.runtime.v1.DeploymentStatus status = 1;
+}

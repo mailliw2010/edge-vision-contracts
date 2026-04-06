@@ -12,12 +12,6 @@ service NodeAgentService {
   rpc RestartSupervisor(RestartSupervisorRequest) returns (RestartSupervisorResponse);
 }
 
-enum AccelerationBackend {
-  ACCELERATION_BACKEND_UNSPECIFIED = 0;
-  ACCELERATION_BACKEND_TENSORRT = 1;
-  ACCELERATION_BACKEND_CPU = 2;
-}
-
 message NodeStatus {
   string node_id = 1;
   string agent_version = 2;
@@ -25,7 +19,7 @@ message NodeStatus {
   edgevision.common.v1.HealthState health = 4;
   string platform = 5;
   string device_class = 6;
-  AccelerationBackend preferred_backend = 7;
+  edgevision.common.v1.ExecutionBackend preferred_backend = 7;
   bool supervisor_reachable = 8;
   edgevision.common.v1.StatusSnapshotMeta snapshot = 9;
 }
