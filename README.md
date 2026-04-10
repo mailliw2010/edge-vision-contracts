@@ -1,8 +1,34 @@
 # edge-vision-contracts
 
-共享契约仓，用来冻结 phase-1 最小闭环依赖的 proto 边界。
+共享契约仓，用来冻结当前最小闭环与后续扩展所依赖的跨仓协议边界。
+
+当前阶段，最小闭环的真实架构口径已经明确为：
+
+- `control-plane` 负责业务编排入口与状态汇聚
+- `runtime` 负责 Supervisor / Source / Worker 的执行侧闭环
+- `runtime` 最小业务闭环会纳入：
+  - ZLMediaKit（流媒体入口/代理）
+  - GStreamer / DeepStream（解码与媒体处理）
+  - 本机推理（FastDeploy 或直接 TensorRT）
+- `contracts` 负责冻结这几者之间真正需要跨仓、跨进程稳定演进的最小协定
 
 当前仍保持 **设计级 / skeleton 级**：只把跨仓边界先钉住，不提前展开字段级精细设计、存储模型或前端 UI 契约。
+
+## 当前最小闭环职责
+
+本仓当前负责：
+
+- 定义 control-plane ↔ runtime 的最小控制与状态契约
+- 定义 control-plane ↔ nodeagent 的最小系统契约
+- 定义 control-plane 对外可查询的聚合状态契约
+- 提供 Go codegen / descriptor 生成能力，支撑多仓联调
+
+本仓当前不负责：
+
+- YAML 部署文件格式
+- runtime 内部 JSON DAG 结构
+- 前端页面模型
+- control-plane 仓内 handler / service / repository 细节
 
 ## phase-1 当前闭环
 
