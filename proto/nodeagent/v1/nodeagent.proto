@@ -12,6 +12,36 @@ service NodeAgentService {
   rpc RestartSupervisor(RestartSupervisorRequest) returns (RestartSupervisorResponse);
 }
 
+message NodeAccelerator {
+  string accelerator_id = 1;
+  string vendor = 2;
+  string model = 3;
+  uint64 memory_bytes = 4;
+  string driver_version = 5;
+  string cuda_compute_capability = 6;
+  bool supports_hardware_decode = 7;
+  bool supports_hardware_encode = 8;
+}
+
+message NodeCapabilities {
+  string architecture = 1;
+  string operating_system = 2;
+  string device_class = 3;
+  uint64 memory_bytes = 4;
+  repeated NodeAccelerator accelerators = 5;
+  repeated edgevision.common.v1.ExecutionMode supported_execution_modes = 6;
+  repeated edgevision.common.v1.ExecutionBackend supported_execution_backends = 7;
+  repeated string decode_codecs = 8;
+  repeated string encode_codecs = 9;
+  repeated string gstreamer_plugins = 10;
+  string cuda_version = 11;
+  string tensorrt_version = 12;
+  string nvidia_driver_version = 13;
+  bool supports_hardware_decode = 14;
+  bool supports_hardware_encode = 15;
+  map<string, string> labels = 16;
+}
+
 message NodeStatus {
   string node_id = 1;
   string agent_version = 2;
@@ -19,9 +49,12 @@ message NodeStatus {
   edgevision.common.v1.HealthState health = 4;
   string platform = 5;
   string device_class = 6;
-  edgevision.common.v1.ExecutionBackend preferred_backend = 7;
+  edgevision.common.v1.ExecutionBackend preferred_backend = 7 [deprecated = true];
   bool supervisor_reachable = 8;
   edgevision.common.v1.StatusSnapshotMeta snapshot = 9;
+  NodeCapabilities capabilities = 10;
+  edgevision.common.v1.ExecutionMode preferred_execution_mode = 11;
+  edgevision.common.v1.ExecutionBackend preferred_execution_backend = 12;
 }
 
 message GetNodeStatusRequest {

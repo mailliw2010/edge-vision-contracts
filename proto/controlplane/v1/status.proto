@@ -5,11 +5,31 @@ package edgevision.controlplane.v1;
 option go_package = "edgevision/contracts/gen/controlplane/v1;controlplanev1";
 
 import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
 import "nodeagent/v1/nodeagent.proto";
 import "runtime/v1/runtime.proto";
 
 service StatusSinkService {
   rpc PublishStatus(PublishStatusRequest) returns (PublishStatusResponse);
+}
+
+// RuntimeEventSinkService is the runtime -> control-plane/event-ingest RPC.
+//
+// Runtime publishes compact execution-side facts here. The event-ingest layer
+// enriches, deduplicates, persists, and then publishes BusinessEventEnvelope to
+// RabbitMQ/Kafka/NATS topics for downstream consumers. Product consumers should
+// subscribe to those MQ topics by default, not connect directly to runtime.
+service RuntimeEventSinkService {
+  rpc PublishRuntimeEvents(PublishRuntimeEventsRequest) returns (PublishRuntimeEventsResponse);
+}
+
+enum BusinessEventState {
+  BUSINESS_EVENT_STATE_UNSPECIFIED = 0;
+  BUSINESS_EVENT_STATE_OPENED = 1;
+  BUSINESS_EVENT_STATE_UPDATED = 2;
+  BUSINESS_EVENT_STATE_CLOSED = 3;
+  BUSINESS_EVENT_STATE_ACKNOWLEDGED = 4;
+  BUSINESS_EVENT_STATE_SUPPRESSED = 5;
 }
 
 message PublishStatusRequest {
@@ -25,4 +45,55 @@ message PublishStatusRequest {
 message PublishStatusResponse {
   bool accepted = 1;
   string status_id = 2;
+}
+
+message PublishRuntimeEventsRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  repeated edgevision.runtime.v1.RuntimeEvent events = 2;
+}
+
+message PublishRuntimeEventsResponse {
+  bool accepted = 1;
+  string batch_id = 2;
+  uint32 accepted_count = 3;
+}
+
+// BusinessEvent is the enriched event emitted by control-plane/event-ingest.
+// It is derived from runtime RuntimeEvent plus control-plane metadata such as
+// camera, deployment, business algorithm, tenancy, lifecycle, and evidence.
+message BusinessEvent {
+  string event_id = 1;
+  string source_runtime_event_id = 2;
+  string deployment_id = 3;
+  string node_id = 4;
+  string runtime_instance_id = 5;
+  string camera_id = 6;
+  string camera_name = 7;
+  string business_algorithm_id = 8;
+  string business_algorithm_version = 9;
+  string event_type = 10;
+  edgevision.common.v1.EventSeverity severity = 11;
+  BusinessEventState state = 12;
+  string message = 13;
+  google.protobuf.Timestamp occurred_at = 14;
+  google.protobuf.Timestamp ingested_at = 15;
+  google.protobuf.Timestamp published_at = 16;
+  uint64 sequence = 17;
+  map<string, string> attributes = 18;
+  repeated edgevision.common.v1.ResourceRef evidence = 19;
+  string tenant_id = 20;
+  string project_id = 21;
+  string location_id = 22;
+}
+
+// BusinessEventEnvelope is the MQ payload published by control-plane/event-ingest.
+// The same message can be serialized for RabbitMQ, Kafka, or NATS. Transport
+// details such as exchange, subject, topic, partitioning, and consumer groups
+// are deployment concerns; topic and routing_key are included for traceability.
+message BusinessEventEnvelope {
+  string schema_version = 1;
+  string topic = 2;
+  string routing_key = 3;
+  BusinessEvent event = 4;
+  map<string, string> headers = 5;
 }

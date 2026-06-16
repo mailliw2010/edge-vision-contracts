@@ -5,6 +5,7 @@ package edgevision.runtime.v1;
 option go_package = "edgevision/contracts/gen/runtime/v1;runtimev1";
 
 import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
 
 service SupervisorService {
   rpc ApplyDeployment(ApplyDeploymentRequest) returns (ApplyDeploymentResponse);
@@ -13,15 +14,67 @@ service SupervisorService {
   rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
 }
 
+message RuntimeSourceBinding {
+  string binding_id = 1;
+  edgevision.common.v1.ResourceRef input_binding = 2;
+  map<string, string> labels = 3;
+}
+
+message RuntimeAlgorithmBinding {
+  string binding_id = 1;
+  edgevision.common.v1.ResourceRef algorithm = 2;
+  edgevision.common.v1.ResourceRef artifact = 3;
+  edgevision.common.v1.ResourceRef config_revision = 4;
+  edgevision.common.v1.ExecutionMode execution_mode = 5;
+  edgevision.common.v1.ExecutionBackend execution_backend = 6;
+  repeated string input_binding_ids = 7;
+  map<string, string> parameters = 8;
+}
+
+message RuntimeOutputBinding {
+  string binding_id = 1;
+  string kind = 2;
+  edgevision.common.v1.ResourceRef sink = 3;
+  map<string, string> options = 4;
+}
+
+message RuntimeExecutionPolicy {
+  bool report_runtime_events = 1;
+  uint32 event_batch_size = 2;
+  uint32 max_events_per_second = 3;
+  map<string, string> options = 4;
+}
+
+// ExecutionRequest is the explicit, declarative request sent by the backend
+// to runtime. It is not compiled C++/model code and is not runtime's internal
+// graph representation. Runtime owns validation, normalization, model loading,
+// and binding each algorithm node to the effective execution backend.
+message ExecutionRequest {
+  string execution_request_id = 1;
+  edgevision.common.v1.ExecutionMode execution_mode = 2;
+  edgevision.common.v1.ExecutionBackend execution_backend = 3;
+  repeated RuntimeSourceBinding sources = 4;
+  repeated RuntimeAlgorithmBinding algorithms = 5;
+  repeated RuntimeOutputBinding outputs = 6;
+  RuntimeExecutionPolicy policy = 7;
+  edgevision.common.v1.ResourceRef runtime_config = 8;
+}
+
 message WorkloadSpec {
   string deployment_id = 1;
   string node_id = 2;
   edgevision.common.v1.ResourceRef artifact = 3;
   edgevision.common.v1.ResourceRef config_revision = 4;
   edgevision.common.v1.ResourceRef input_binding = 5;
-  edgevision.common.v1.ExecutionBackend preferred_backend = 6;
+  edgevision.common.v1.ExecutionBackend preferred_backend = 6 [deprecated = true];
+  edgevision.common.v1.ExecutionMode execution_mode = 7;
+  edgevision.common.v1.ExecutionBackend execution_backend = 8;
+  ExecutionRequest execution = 9;
 }
 
+// ApplyDeployment applies an algorithm deployment intent to a runtime node.
+// The deployment is about binding cameras/inputs, algorithm artifacts/config,
+// and runtime policy to a node. It is not an infrastructure deployment.
 message ApplyDeploymentRequest {
   edgevision.common.v1.RequestMeta meta = 1;
   WorkloadSpec spec = 2;
@@ -65,9 +118,11 @@ message SupervisorStatus {
   string supervisor_version = 2;
   edgevision.common.v1.LifecycleState state = 3;
   edgevision.common.v1.HealthState health = 4;
-  edgevision.common.v1.ExecutionBackend default_backend = 5;
+  edgevision.common.v1.ExecutionBackend default_backend = 5 [deprecated = true];
   uint32 active_deployment_count = 6;
   edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
+  edgevision.common.v1.ExecutionMode default_execution_mode = 8;
+  edgevision.common.v1.ExecutionBackend default_execution_backend = 9;
 }
 
 message DeploymentStatus {
@@ -78,4 +133,22 @@ message DeploymentStatus {
   edgevision.common.v1.HealthState health = 5;
   string status_message = 6;
   edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
+  edgevision.common.v1.ExecutionMode effective_execution_mode = 8;
+  edgevision.common.v1.ExecutionBackend effective_execution_backend = 9;
+}
+
+message RuntimeEvent {
+  string event_id = 1;
+  string deployment_id = 2;
+  string node_id = 3;
+  string runtime_instance_id = 4;
+  string source_binding_id = 5;
+  string algorithm_binding_id = 6;
+  string event_type = 7;
+  edgevision.common.v1.EventSeverity severity = 8;
+  string message = 9;
+  google.protobuf.Timestamp occurred_at = 10;
+  uint64 sequence = 11;
+  map<string, string> attributes = 12;
+  repeated edgevision.common.v1.ResourceRef evidence = 13;
 }

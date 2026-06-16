@@ -34,6 +34,7 @@
 
 - control-plane -> `runtime.v1.SupervisorService`：下发部署 / 停止、直连查询 supervisor / deployment 状态
 - supervisor / nodeagent -> `controlplane.v1.StatusSinkService`：向 control-plane 发布状态快照
+- runtime -> `controlplane.v1.RuntimeEventSinkService`：向 control-plane 批量上报稳定业务 / runtime 事件
 - control-plane 对外 -> `controlplane.v1.StatusQueryService`：暴露 control-plane 已接收的最新状态视图
 - control-plane -> `nodeagent.v1.NodeAgentService`：节点状态查询、节点配置下发、supervisor 重启
 
@@ -47,16 +48,80 @@
 
 | package | 负责什么 | 当前刻意不做什么 |
 | --- | --- | --- |
-| `common/v1` | 共享基元、状态枚举、通用 `ExecutionBackend` | 领域对象明细、资源模型扩展 |
-| `runtime/v1` | control-plane 对 supervisor 的控制调用；runtime 侧状态结构 | 调度策略、任务编排细节 |
+| `common/v1` | 共享基元、状态枚举、通用 `ExecutionMode` / `ExecutionBackend` | 领域对象明细、资源模型扩展 |
+| `runtime/v1` | control-plane 对 supervisor 的控制调用；runtime 侧执行请求、状态与事件结构 | runtime 内部 graph schema、调度实现细节 |
 | `controlplane/v1` | control-plane 暴露的状态入口与最新快照查询 | 前端页面模型、列表筛选、审计流 |
-| `nodeagent/v1` | 节点基础状态 / 配置 / supervisor 运维动作 | 升级、诊断、设备管理全量能力 |
+| `nodeagent/v1` | 节点基础状态、节点能力、配置 / supervisor 运维动作 | 升级、诊断、设备管理全量能力 |
 
 ## 这次边界收敛点
 
-- 把 runtime / nodeagent 里重复的 backend 枚举收敛到 `common.v1.ExecutionBackend`
+- 把执行方式拆成 `common.v1.ExecutionMode` 和 `common.v1.ExecutionBackend`
+- 在 `runtime.v1.WorkloadSpec` 中补充明确的 `ExecutionRequest`，按方案 B 走“backend 下发声明式执行请求，runtime 内部规范化和绑定”的边界
+- 在 `nodeagent.v1.NodeStatus` 中补充 `NodeCapabilities`
 - 保留 `StatusSinkService` 作为写入入口，不把 control-plane 的内部持久化模型塞进契约
+- 新增 `RuntimeEventSinkService` 作为 runtime -> backend/control-plane 的稳定事件上报 RPC
 - 新增 `StatusQueryService` 作为最小读侧骨架，只返回 **latest accepted snapshot**，不引入列表、过滤、分页
+
+## 执行请求边界
+
+当前采用方案 B：
+
+- backend / control-plane 负责保存业务定义、配置修订、部署意图，并把相机、算法、策略和节点解析成声明式 `runtime.v1.ExecutionRequest`
+- backend / control-plane 不给 runtime 编译 C++、模型 engine 或 runtime 内部 graph
+- runtime 负责根据 `ExecutionRequest` 做校验、规范化、Source/Worker wiring、模型加载、后端绑定和内部执行图构建
+- 算法主逻辑优先集中在 runtime，backend 只做编排、引用解析、状态汇聚和产品 API
+
+`ExecutionMode` 和 `ExecutionBackend` 分开表达：
+
+- `ExecutionMode`：runtime 如何调用算法节点，例如本进程逐帧执行、远程 gRPC 服务、远程 HTTP 服务
+- `ExecutionBackend`：具体执行引擎或加速目标，例如 TensorRT、CPU、FastDeploy、DeepStream、Triton、ONNX Runtime
+
+旧的 `preferred_backend` / `default_backend` 字段已标记 deprecated，只保留 wire 兼容；新实现应使用 `execution_mode` 和 `execution_backend`。
+
+## Deployment 语义
+
+这里的 `Deployment` 指**算法布控部署**，不是 Kubernetes / Docker / systemd 这类基础设施部署。
+
+它的作用是描述一个期望状态：把某组摄像头或输入、某个业务算法版本、某组 artifact/config/policy、某个目标节点和 runtime 执行策略绑定起来。control-plane 负责保存和下发这个期望状态，runtime 负责把它落成真实运行的 source / worker / pipeline 会话。
+
+## 事件上报传输选择
+
+当前采用的事件链路是：
+
+```text
+runtime
+  -> control-plane/event-ingest: gRPC RuntimeEventSinkService.PublishRuntimeEvents
+  -> RabbitMQ/Kafka/NATS: BusinessEventEnvelope
+  -> consumers: subscribe MQ topics
+```
+
+runtime -> control-plane/event-ingest 使用 gRPC，原因是：
+
+- 这是执行侧到 ingest 的服务到服务通信，双方都依赖 proto，gRPC 可以直接复用强类型 schema 和生成代码
+- 事件频率低/中频，当前业务事件大约 0.5/s，峰值约 2-3/s；gRPC 批量上报足够直接
+- 有 deadline、状态码、拦截器、连接复用等内置能力，和现有 `SupervisorService` / `StatusSinkService` 风格一致
+
+control-plane/event-ingest -> consumers 使用 RabbitMQ/Kafka/NATS，原因是：
+
+- 存在多个消费者同时订阅业务事件的需求，fanout 不应由 runtime 承担
+- control-plane 可以先完成事件增强、去重、状态推进、权限/租户/相机/算法元数据补齐和证据引用落库
+- MQ 更适合多消费者、异步削峰、消费者组、失败重试、持久化缓冲和后续重放
+
+REST 更适合 frontend、外部系统和人工调试，不适合作为 runtime 高频内部事件通道的首选。
+
+消费者默认订阅 control-plane/event-ingest 发布的 `BusinessEventEnvelope`，而不是直接连 runtime。只有本地低延迟动作、算法调试、预览/OSD、断网降级和 runtime profiling 这类场景，才应该直接从 runtime 或 observe-agent 获取原始执行侧数据。
+
+高频帧级 telemetry、profile 和原始观测流不走这个 RPC，应继续走 runtime -> observe-agent 的观测链路。
+
+## Rulego 评估口径
+
+Rulego 这类 Go 规则引擎暂不进入 v1 proto 枚举。它可以作为候选方案评估，但不应把 C++ runtime 的基础模型推理路径耦合到 Go 规则引擎里。
+
+更合适的评估方向是：
+
+- backend 侧：用于业务规则的配置校验、产品编排或轻量策略解释
+- runtime 侧：若要参与执行，优先作为远程规则服务或声明式配置来源，而不是替代 C++/GStreamer/TensorRT 主执行链
+- 事件规则：可以消费 runtime 上报后的稳定事件，但不处理原始帧和高频模型输出
 
 ## phase-1 生成策略
 
@@ -90,10 +155,10 @@ phase-1 先把 **Go 生成链跑通**，但继续坚持：
 
 ## 目录
 
-- `proto/common/v1/`：共享基元、资源引用、状态枚举、共享执行后端枚举
-- `proto/runtime/v1/`：supervisor 对外控制面
+- `proto/common/v1/`：共享基元、资源引用、状态枚举、执行模式 / 执行后端枚举
+- `proto/runtime/v1/`：supervisor 对外控制面、明确执行请求、runtime 状态与事件结构
 - `proto/controlplane/v1/`：control-plane 状态入口 + 最新快照查询骨架
-- `proto/nodeagent/v1/`：nodeagent 基础状态 / 操作
+- `proto/nodeagent/v1/`：nodeagent 基础状态、节点能力 / 操作
 - `scripts/`：校验 / 生成脚本
 - `gen/`：本地可重复生成产物目录（默认不提交）
 - `buf/`：Buf 预留目录，当前未强依赖

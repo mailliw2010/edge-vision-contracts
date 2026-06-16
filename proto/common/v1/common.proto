@@ -43,8 +43,31 @@ enum HealthState {
   HEALTH_STATE_ERROR = 4;
 }
 
+// ExecutionMode describes how runtime invokes an algorithm node.
+// It is intentionally separate from ExecutionBackend:
+// - mode is the process / transport shape;
+// - backend is the concrete execution engine or acceleration target.
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_LOCAL_FRAME = 1;
+  EXECUTION_MODE_REMOTE_GRPC = 2;
+  EXECUTION_MODE_REMOTE_HTTP = 3;
+}
+
 enum ExecutionBackend {
   EXECUTION_BACKEND_UNSPECIFIED = 0;
   EXECUTION_BACKEND_TENSORRT = 1;
   EXECUTION_BACKEND_CPU = 2;
+  EXECUTION_BACKEND_FASTDEPLOY = 3;
+  EXECUTION_BACKEND_DEEPSTREAM = 4;
+  EXECUTION_BACKEND_TRITON = 5;
+  EXECUTION_BACKEND_ONNX_RUNTIME = 6;
+}
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_INFO = 1;
+  EVENT_SEVERITY_WARNING = 2;
+  EVENT_SEVERITY_ERROR = 3;
+  EVENT_SEVERITY_CRITICAL = 4;
 }
