@@ -8,10 +8,39 @@ import "common/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
 service SupervisorService {
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
   rpc ApplyDeployment(ApplyDeploymentRequest) returns (ApplyDeploymentResponse);
   rpc StopDeployment(StopDeploymentRequest) returns (StopDeploymentResponse);
   rpc GetSupervisorStatus(GetSupervisorStatusRequest) returns (GetSupervisorStatusResponse);
   rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
+}
+
+message RuntimeCapability {
+  string node_id = 1;
+  string runtime_version = 2;
+  repeated edgevision.common.v1.ExecutionMode supported_execution_modes = 3;
+  repeated edgevision.common.v1.ExecutionBackend supported_execution_backends = 4;
+  uint32 max_source_bindings = 5;
+  uint32 max_algorithm_bindings = 6;
+  bool supports_event_stream = 7;
+  map<string, string> labels = 8;
+}
+
+message HandshakeRequest {
+  edgevision.common.v1.RequestMeta meta = 1;
+  string control_plane_id = 2;
+  string node_id = 3;
+  string protocol_version = 4;
+  edgevision.common.v1.ExecutionMode desired_execution_mode = 5;
+  edgevision.common.v1.ExecutionBackend desired_execution_backend = 6;
+}
+
+message HandshakeResponse {
+  bool accepted = 1;
+  string session_id = 2;
+  string protocol_version = 3;
+  RuntimeCapability capability = 4;
+  string message = 5;
 }
 
 message RuntimeSourceBinding {
