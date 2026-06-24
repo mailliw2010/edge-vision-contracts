@@ -8,176 +8,310 @@ import "common/v1/common.proto";
 import "google/protobuf/timestamp.proto";
 
 service SupervisorService {
+  // control-plane 通过 Handshake 建立协议兼容性，并获取指定节点的运行时能力。
   rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
+
+  // ApplyDeployment 向 runtime 下发声明式部署意图。
+  // 请求中包含 source 绑定、算法绑定和输出绑定，runtime 会将其规范化为执行图。
   rpc ApplyDeployment(ApplyDeploymentRequest) returns (ApplyDeploymentResponse);
+
+  // StopDeployment 请求 runtime 停止一个已接受的部署。
   rpc StopDeployment(StopDeploymentRequest) returns (StopDeploymentResponse);
+
+  // GetSupervisorStatus 返回当前 supervisor 级别的生命周期快照。
   rpc GetSupervisorStatus(GetSupervisorStatusRequest) returns (GetSupervisorStatusResponse);
+
+  // GetDeploymentStatus 返回某个部署的生命周期快照。
   rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
 }
 
+// RuntimeCapability 描述当前 runtime 节点能够执行什么。
 message RuntimeCapability {
+  // runtime 节点标识。
   string node_id = 1;
+  // runtime 实现版本。
   string runtime_version = 2;
+  // 当前 runtime 实例支持的执行模式。
   repeated edgevision.common.v1.ExecutionMode supported_execution_modes = 3;
+  // 当前 runtime 实例支持的具体执行后端。
   repeated edgevision.common.v1.ExecutionBackend supported_execution_backends = 4;
+  // 单个部署允许的最大 source 绑定数。
   uint32 max_source_bindings = 5;
+  // 单个部署允许的最大算法绑定数。
   uint32 max_algorithm_bindings = 6;
+  // 当前 runtime 是否支持向控制面回传事件流。
   bool supports_event_stream = 7;
+  // 能力标签，可用于区分构建类型、设备类型等。
   map<string, string> labels = 8;
 }
 
+// HandshakeRequest 是 control-plane 发给 runtime 的初始协商请求。
 message HandshakeRequest {
+  // 请求元数据，用于追踪和审计。
   edgevision.common.v1.RequestMeta meta = 1;
+  // control-plane 标识。
   string control_plane_id = 2;
+  // 目标 runtime 节点标识。
   string node_id = 3;
+  // 期望的协议版本，例如 "runtime.v1"。
   string protocol_version = 4;
+  // 期望的执行模式，用于能力协商。
   edgevision.common.v1.ExecutionMode desired_execution_mode = 5;
+  // 期望的执行后端，用于能力协商。
   edgevision.common.v1.ExecutionBackend desired_execution_backend = 6;
 }
 
+// HandshakeResponse 表示是否接受协商，并返回 runtime 能力。
 message HandshakeResponse {
+  // runtime 是否接受此次握手。
   bool accepted = 1;
+  // runtime 为这次 control-plane 与 node 组合分配的会话 ID。
   string session_id = 2;
+  // 协商后的协议版本。
   string protocol_version = 3;
+  // runtime 能力快照。
   RuntimeCapability capability = 4;
+  // 人类可读的说明信息。
   string message = 5;
 }
 
+// === 基础算法部署层 / 业务算法编排层共用输入 ===
+// RuntimeSourceBinding 描述一个逻辑输入源如何接入执行图。
 message RuntimeSourceBinding {
+  // 执行图中使用的绑定 ID。
   string binding_id = 1;
+  // 该 source 对应的外部资源引用，例如摄像头或视频流。
   edgevision.common.v1.ResourceRef input_binding = 2;
+  // 可选标签，用于控制面或 runtime 规范化附加信息。
   map<string, string> labels = 3;
 }
 
+// RuntimeAlgorithmBinding 描述执行图中的一个算法节点。
+// 在“基础算法部署”语义下，通常是单个算法绑定直接消费 source 输入；
+// 在“业务算法编排”语义下，多个算法绑定可以通过 input_binding_ids 串成 DAG。
 message RuntimeAlgorithmBinding {
+  // 执行图中使用的绑定 ID。
   string binding_id = 1;
+  // 逻辑算法资源引用。
   edgevision.common.v1.ResourceRef algorithm = 2;
+  // runtime 后端实际使用的 artifact 引用。
   edgevision.common.v1.ResourceRef artifact = 3;
+  // 该算法绑定对应的配置版本引用。
   edgevision.common.v1.ResourceRef config_revision = 4;
+  // 该算法绑定的实际执行模式。
   edgevision.common.v1.ExecutionMode execution_mode = 5;
+  // 该算法绑定的实际执行后端。
   edgevision.common.v1.ExecutionBackend execution_backend = 6;
+  // 该算法节点消费的输入绑定 ID 列表。
   repeated string input_binding_ids = 7;
+  // 可选的后端参数或绑定级调优参数。
   map<string, string> parameters = 8;
 }
 
+// RuntimeOutputBinding 描述最终算法输出的汇聚点。
 message RuntimeOutputBinding {
+  // 执行图中使用的绑定 ID。
   string binding_id = 1;
+  // 输出类型，例如 event-topic 或 storage-sink。
   string kind = 2;
+  // 外部 sink 资源引用。
   edgevision.common.v1.ResourceRef sink = 3;
+  // 可选的 sink 专属配置项。
   map<string, string> options = 4;
 }
 
+// RuntimeExecutionPolicy 控制 runtime 的事件输出和批处理策略。
 message RuntimeExecutionPolicy {
+  // runtime 是否上报运行时事件。
   bool report_runtime_events = 1;
+  // 上报事件时的建议批大小。
   uint32 event_batch_size = 2;
+  // 每秒允许输出的事件上限。
   uint32 max_events_per_second = 3;
+  // 自定义策略参数。
   map<string, string> options = 4;
 }
 
-// ExecutionRequest is the explicit, declarative request sent by the backend
-// to runtime. It is not compiled C++/model code and is not runtime's internal
-// graph representation. Runtime owns validation, normalization, model loading,
-// and binding each algorithm node to the effective execution backend.
+// ExecutionRequest 是 control-plane 发给 runtime 的显式声明式执行请求。
+// 它同时承载基础算法部署和业务算法编排两类语义：
+// - 基础算法部署：通常是一个算法节点绑定一组 source；
+// - 业务算法编排：多个算法节点通过 input_binding_ids 连接成 DAG。
+// 它不是编译后的 C++/模型代码，也不是 runtime 内部图结构。
+// runtime 负责校验、规范化、模型加载，以及把每个算法节点绑定到实际执行后端。
 message ExecutionRequest {
+  // 稳定的执行请求 ID，通常与 deployment ID 一致。
   string execution_request_id = 1;
+  // 整个部署的执行模式。
   edgevision.common.v1.ExecutionMode execution_mode = 2;
+  // 整个部署的执行后端。
   edgevision.common.v1.ExecutionBackend execution_backend = 3;
+  // 该执行请求绑定的逻辑输入源。
   repeated RuntimeSourceBinding sources = 4;
+  // runtime 规范化后的算法图绑定。
   repeated RuntimeAlgorithmBinding algorithms = 5;
+  // 可选的输出 / sink 绑定。
   repeated RuntimeOutputBinding outputs = 6;
+  // runtime 执行策略。
   RuntimeExecutionPolicy policy = 7;
+  // 可选的 runtime 专属配置引用。
   edgevision.common.v1.ResourceRef runtime_config = 8;
 }
 
+// WorkloadSpec 描述 runtime 接受的部署工作负载。
+// deployment 维度的身份信息、输入引用和执行请求都在这里汇总。
 message WorkloadSpec {
+  // 部署标识。
   string deployment_id = 1;
+  // 目标 runtime 节点标识。
   string node_id = 2;
+  // 算法 artifact 引用。
   edgevision.common.v1.ResourceRef artifact = 3;
+  // 配置版本引用。
   edgevision.common.v1.ResourceRef config_revision = 4;
+  // 主输入绑定引用。
   edgevision.common.v1.ResourceRef input_binding = 5;
+  // 为兼容旧协议保留的废弃字段。
   edgevision.common.v1.ExecutionBackend preferred_backend = 6 [deprecated = true];
+  // 实际执行模式。
   edgevision.common.v1.ExecutionMode execution_mode = 7;
+  // 实际执行后端。
   edgevision.common.v1.ExecutionBackend execution_backend = 8;
+  // control-plane 规范化后的声明式执行请求。
   ExecutionRequest execution = 9;
 }
 
-// ApplyDeployment applies an algorithm deployment intent to a runtime node.
-// The deployment is about binding cameras/inputs, algorithm artifacts/config,
-// and runtime policy to a node. It is not an infrastructure deployment.
+// ApplyDeployment 请求将一个算法部署意图应用到 runtime 节点。
+// 这里的部署是把 source、算法、artifact、配置和运行策略绑定到节点，
+// 不是基础设施部署。
 message ApplyDeploymentRequest {
+  // 请求元数据，用于追踪和审计。
   edgevision.common.v1.RequestMeta meta = 1;
+  // 要应用的工作负载规格。
   WorkloadSpec spec = 2;
 }
 
+// ApplyDeploymentResponse 表示部署请求是否被接受。
 message ApplyDeploymentResponse {
+  // runtime 是否接受该部署请求。
   bool accepted = 1;
+  // runtime 为该请求分配的操作 ID。
   string operation_id = 2;
 }
 
+// StopDeploymentRequest 请求 runtime 停止某个部署。
 message StopDeploymentRequest {
+  // 请求元数据，用于追踪和审计。
   edgevision.common.v1.RequestMeta meta = 1;
+  // 要停止的部署 ID。
   string deployment_id = 2;
+  // 目标节点 ID。
   string node_id = 3;
 }
 
+// StopDeploymentResponse 表示停止请求是否被接受。
 message StopDeploymentResponse {
+  // runtime 是否接受该停止请求。
   bool accepted = 1;
+  // runtime 为该停止请求分配的操作 ID。
   string operation_id = 2;
 }
 
+// GetSupervisorStatusRequest 用于查询某个 runtime 节点。
 message GetSupervisorStatusRequest {
+  // 目标节点 ID；如果为空，runtime 可以使用本地节点。
   string node_id = 1;
 }
 
+// GetSupervisorStatusResponse 返回 runtime 节点快照。
 message GetSupervisorStatusResponse {
+  // 当前 supervisor 状态快照。
   SupervisorStatus status = 1;
 }
 
+// GetDeploymentStatusRequest 用于查询某个节点上的某个部署。
 message GetDeploymentStatusRequest {
+  // 部署 ID。
   string deployment_id = 1;
+  // 目标节点 ID。
   string node_id = 2;
 }
 
+// GetDeploymentStatusResponse 返回最新部署快照。
 message GetDeploymentStatusResponse {
+  // 当前部署状态快照。
   DeploymentStatus status = 1;
 }
 
+// SupervisorStatus 是 runtime 节点级生命周期快照。
 message SupervisorStatus {
+  // runtime 节点标识。
   string node_id = 1;
+  // runtime 实现版本。
   string supervisor_version = 2;
+  // 节点生命周期状态。
   edgevision.common.v1.LifecycleState state = 3;
+  // 节点健康状态。
   edgevision.common.v1.HealthState health = 4;
+  // 为兼容旧协议保留的废弃字段。
   edgevision.common.v1.ExecutionBackend default_backend = 5 [deprecated = true];
+  // 当前活跃部署数量。
   uint32 active_deployment_count = 6;
+  // 快照元数据，用于观测和排序。
   edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
+  // runtime 节点默认执行模式。
   edgevision.common.v1.ExecutionMode default_execution_mode = 8;
+  // runtime 节点默认执行后端。
   edgevision.common.v1.ExecutionBackend default_execution_backend = 9;
 }
 
+// DeploymentStatus 是部署级生命周期快照。
 message DeploymentStatus {
+  // 部署标识。
   string deployment_id = 1;
+  // runtime 节点标识。
   string node_id = 2;
+  // 该部署对应的 runtime 实例标识。
   string runtime_instance_id = 3;
+  // 部署生命周期状态。
   edgevision.common.v1.LifecycleState state = 4;
+  // 部署健康状态。
   edgevision.common.v1.HealthState health = 5;
+  // 人类可读的状态说明。
   string status_message = 6;
+  // 快照元数据，用于观测和排序。
   edgevision.common.v1.StatusSnapshotMeta snapshot = 7;
+  // runtime 规范化后的实际执行模式。
   edgevision.common.v1.ExecutionMode effective_execution_mode = 8;
+  // runtime 规范化后的实际执行后端。
   edgevision.common.v1.ExecutionBackend effective_execution_backend = 9;
 }
 
+// RuntimeEvent 是 runtime 产生的紧凑执行侧事件。
 message RuntimeEvent {
+  // 事件标识。
   string event_id = 1;
+  // 产生该事件的部署 ID。
   string deployment_id = 2;
+  // runtime 节点标识。
   string node_id = 3;
+  // runtime 实例标识。
   string runtime_instance_id = 4;
+  // 事件涉及的 source 绑定 ID。
   string source_binding_id = 5;
+  // 事件涉及的算法绑定 ID。
   string algorithm_binding_id = 6;
+  // 事件类型，例如 frame、detection、warning、error。
   string event_type = 7;
+  // 事件严重级别。
   edgevision.common.v1.EventSeverity severity = 8;
+  // 人类可读的事件信息。
   string message = 9;
+  // 事件发生时间。
   google.protobuf.Timestamp occurred_at = 10;
+  // 同一 runtime 实例内的单调递增序号。
   uint64 sequence = 11;
+  // 自定义事件属性。
   map<string, string> attributes = 12;
+  // 事件附带的证据引用。
   repeated edgevision.common.v1.ResourceRef evidence = 13;
 }

@@ -10,19 +10,20 @@ import "nodeagent/v1/nodeagent.proto";
 import "runtime/v1/runtime.proto";
 
 service StatusSinkService {
+  // runtime 或 nodeagent 通过该 RPC 向 control-plane 写入状态快照。
   rpc PublishStatus(PublishStatusRequest) returns (PublishStatusResponse);
 }
 
-// RuntimeEventSinkService is the runtime -> control-plane/event-ingest RPC.
+// RuntimeEventSinkService 是 runtime -> control-plane/event-ingest 的回传 RPC。
 //
-// Runtime publishes compact execution-side facts here. The event-ingest layer
-// enriches, deduplicates, persists, and then publishes BusinessEventEnvelope to
-// RabbitMQ/Kafka/NATS topics for downstream consumers. Product consumers should
-// subscribe to those MQ topics by default, not connect directly to runtime.
+// runtime 在这里上报紧凑的执行侧事实。event-ingest 会对事件做补全、去重、落库，
+// 然后发布 BusinessEventEnvelope 到 RabbitMQ/Kafka/NATS 供下游消费者订阅。
+// 产品消费方默认应订阅 MQ topic，而不是直接连接 runtime。
 service RuntimeEventSinkService {
   rpc PublishRuntimeEvents(PublishRuntimeEventsRequest) returns (PublishRuntimeEventsResponse);
 }
 
+// BusinessEventState 描述业务事件在 control-plane 里的生命周期。
 enum BusinessEventState {
   BUSINESS_EVENT_STATE_UNSPECIFIED = 0;
   BUSINESS_EVENT_STATE_OPENED = 1;
@@ -32,68 +33,110 @@ enum BusinessEventState {
   BUSINESS_EVENT_STATE_SUPPRESSED = 5;
 }
 
+// PublishStatusRequest 用于接收 runtime/nodeagent 上报的状态快照。
 message PublishStatusRequest {
+  // 请求元数据，用于追踪和审计。
   edgevision.common.v1.RequestMeta meta = 1;
 
+  // oneof 表示上报的状态类型。
   oneof payload {
+    // runtime supervisor 的状态快照。
     edgevision.runtime.v1.SupervisorStatus supervisor_status = 2;
+    // runtime deployment 的状态快照。
     edgevision.runtime.v1.DeploymentStatus deployment_status = 3;
+    // nodeagent 节点状态快照。
     edgevision.nodeagent.v1.NodeStatus node_status = 4;
   }
 }
 
+// PublishStatusResponse 表示状态快照是否被接受。
 message PublishStatusResponse {
+  // 是否接受该状态快照。
   bool accepted = 1;
+  // 状态快照记录 ID。
   string status_id = 2;
 }
 
+// PublishRuntimeEventsRequest 用于批量上报 runtime 事件。
 message PublishRuntimeEventsRequest {
+  // 请求元数据，用于追踪和审计。
   edgevision.common.v1.RequestMeta meta = 1;
+  // 本批次 runtime 事件列表。
   repeated edgevision.runtime.v1.RuntimeEvent events = 2;
 }
 
+// PublishRuntimeEventsResponse 表示事件批次是否被接受。
 message PublishRuntimeEventsResponse {
+  // 是否接受该批次事件。
   bool accepted = 1;
+  // 事件批次 ID。
   string batch_id = 2;
+  // 实际被接受的事件数量。
   uint32 accepted_count = 3;
 }
 
-// BusinessEvent is the enriched event emitted by control-plane/event-ingest.
-// It is derived from runtime RuntimeEvent plus control-plane metadata such as
-// camera, deployment, business algorithm, tenancy, lifecycle, and evidence.
+// BusinessEvent 是 control-plane/event-ingest 补全后的业务事件。
+// 它由 runtime 的 RuntimeEvent 派生而来，再补充摄像头、部署、业务算法、
+// 租户、生命周期和证据等控制面元数据。
 message BusinessEvent {
+  // 业务事件标识。
   string event_id = 1;
+  // 源 runtime 事件标识。
   string source_runtime_event_id = 2;
+  // 部署 ID。
   string deployment_id = 3;
+  // 节点 ID。
   string node_id = 4;
+  // runtime 实例 ID。
   string runtime_instance_id = 5;
+  // 摄像头 ID。
   string camera_id = 6;
+  // 摄像头名称。
   string camera_name = 7;
+  // 业务算法 ID。
   string business_algorithm_id = 8;
+  // 业务算法版本。
   string business_algorithm_version = 9;
+  // 事件类型。
   string event_type = 10;
+  // 事件严重级别。
   edgevision.common.v1.EventSeverity severity = 11;
+  // 业务事件生命周期状态。
   BusinessEventState state = 12;
+  // 人类可读的业务事件消息。
   string message = 13;
+  // 事件发生时间。
   google.protobuf.Timestamp occurred_at = 14;
+  // 事件进入 control-plane 的时间。
   google.protobuf.Timestamp ingested_at = 15;
+  // 业务事件发布到外部消费者的时间。
   google.protobuf.Timestamp published_at = 16;
+  // 单调递增序号。
   uint64 sequence = 17;
+  // 自定义业务属性。
   map<string, string> attributes = 18;
+  // 证据引用。
   repeated edgevision.common.v1.ResourceRef evidence = 19;
+  // 租户 ID。
   string tenant_id = 20;
+  // 项目 ID。
   string project_id = 21;
+  // 位置 ID。
   string location_id = 22;
 }
 
-// BusinessEventEnvelope is the MQ payload published by control-plane/event-ingest.
-// The same message can be serialized for RabbitMQ, Kafka, or NATS. Transport
-// details such as exchange, subject, topic, partitioning, and consumer groups
-// are deployment concerns; topic and routing_key are included for traceability.
+// BusinessEventEnvelope 是 control-plane/event-ingest 发布到 MQ 的消息载荷。
+// 同一消息可以序列化给 RabbitMQ、Kafka 或 NATS。exchange、subject、topic、
+// 分区和 consumer group 等传输细节属于部署配置；这里保留 topic 和 routing_key 以便追踪。
 message BusinessEventEnvelope {
+  // 协议版本。
   string schema_version = 1;
+  // 逻辑 topic。
   string topic = 2;
+  // 路由键。
   string routing_key = 3;
+  // 业务事件正文。
   BusinessEvent event = 4;
+  // 传输头部信息。
   map<string, string> headers = 5;
 }
